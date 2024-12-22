@@ -16,15 +16,26 @@ fn chronos_inner_print(data: TData) -> TData {
     return TData::Nil;
 }
 
-fn chronos_inner_add(d: TData) -> TData {
-    match d {
-        TwoData(box Number(a), box TwoData(box Number(b), box Nil)) => Number(a + b),
-        _ => {
-            println!("{d:#?}");
-            panic!()
-        }, // TODO: make more stable
+
+macro_rules! generate_chronos_inner_f {
+    ($name:ident, $f:expr) => {
+        fn $name(d: TData) -> TData {
+            match d {
+                TwoData(box Number(a), box TwoData(box Number(b), box Nil)) => Number($f(a, b)),
+                _ => {
+                    println!("{d:#?}");
+                    panic!("chronos inner function {} failed to parse arguments", stringify!($name));
+                }, // TODO: make more stable
+            }
+        }
     }
 }
+
+generate_chronos_inner_f! { chronos_inner_add, std::ops::Add::add }
+generate_chronos_inner_f! { chronos_inner_sub, std::ops::Sub::sub }
+generate_chronos_inner_f! { chronos_inner_mul, std::ops::Mul::mul }
+generate_chronos_inner_f! { chronos_inner_div, std::ops::Div::div }
+
 
 fn chronos_inner_lambda(e: Arc<Environment>, d: AST) -> AST {
     // Unpack arguments
@@ -66,6 +77,9 @@ impl Environment {
                 data: HashMap::from([
                     ("print" .into(), Function(TFunction(Arc::new(chronos_inner_print)))),
                     ("+"     .into(), Function(TFunction(Arc::new(chronos_inner_add)))),
+                    ("-"     .into(), Function(TFunction(Arc::new(chronos_inner_sub)))),
+                    ("*"     .into(), Function(TFunction(Arc::new(chronos_inner_mul)))),
+                    ("/"     .into(), Function(TFunction(Arc::new(chronos_inner_div)))),
                     ("lambda".into(), Macro(   TMacro   (Arc::new(chronos_inner_lambda)))),
                 ])
             })
