@@ -1,0 +1,14 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+    name_character = @{ !WHITESPACE ~ !"\"" ~ !"." ~ !"(" ~ !")" ~ !ASCII_DIGIT ~ ANY}
+    name = @{ name_character ~ (name_character | ASCII_DIGIT)* }
+
+    inner_string = @{ (!"\"" ~ ANY)+ }
+    string = ${ "\"" ~ inner_string ~ "\"" }
+
+    number = @{ (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)?) | ("." ~ ASCII_DIGIT*)  }
+  data = _{ string | name | number}
+
+	two = { (expr ~ two) | "" }
+  application = { "(" ~ expr ~ two ~ ")" }
+expr = _{ data | application }
