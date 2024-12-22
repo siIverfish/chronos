@@ -14,7 +14,7 @@ pub enum TData {
     Function(TFunction),
     Macro(TMacro),
     TwoData(Box<TData>, Box<TData>),
-    Lazy(Box<AST>),
+    // Lazy(Box<AST>),
     Nil,
 }
 
@@ -28,7 +28,7 @@ impl Debug for TFunction {
 }
 
 #[derive(Clone)]
-pub struct TMacro(pub Arc<dyn Fn(&'static Environment, AST) -> AST + Sync + Send>);
+pub struct TMacro(pub Arc<dyn Fn(Arc<Environment>, AST) -> AST + Sync + Send>);
 impl Debug for TMacro {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<TMacro@{:p}>", Arc::as_ptr(&self.0))

@@ -26,18 +26,22 @@ fn chronos_inner_add(d: TData) -> TData {
     }
 }
 
-fn chronos_inner_lambda(e: &'static Environment, d: AST) -> AST {
+fn chronos_inner_lambda(e: Arc<Environment>, d: AST) -> AST {
+    // Unpack arguments
     let Abstract(TwoAST(box Abstract(Name(parameter)), box Abstract(TwoAST(box expr, _)))) = d
         else { panic!("could not parse arguments to lambda") };
     
     let function: TFunction = TFunction(Arc::new(move |data| {
+        // Clone all the data that will be consumed, because other copies of this closure might need it.
         let parameter = parameter.clone();
         let expr = expr.clone();
+        let e = e.clone();
+        // Unpack arguments
         let TwoData(box data, _) = data else { panic!("expect 1 argument"); };
+        // Evaluate function body (expr) in new environment
         let data = HashMap::from([(parameter, data)]);
-        // TODO: this is very bad.
-        let env = Box::leak(Box::new(Environment::from_parent_and_data(e, data)));
-        env.eval(expr)
+        let new_environment = Arc::new(Environment::from_parent_and_data(e, data));
+        new_environment.eval(expr)
     }));
 
     Data(Function(function))
@@ -45,30 +49,30 @@ fn chronos_inner_lambda(e: &'static Environment, d: AST) -> AST {
 
 #[derive(Clone, Debug)]
 pub struct Environment {
-    parent: Option<&'static Environment>,
+    parent: Option<Arc<Environment>>,
     data: HashMap<std::string::String, TData>,
     //children: Vec<Environment>,
 }
 
 // TODO: is this static variable necessary?
 // or can one global env be kept track of
-static GLOBAL_ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
+static GLOBAL_ENVIRONMENT: OnceLock<Arc<Environment>> = OnceLock::new();
 
 impl Environment {
-    pub fn global() -> &'static Self {
+    pub fn global() -> &'static Arc<Self> {
         GLOBAL_ENVIRONMENT.get_or_init(|| 
-            Environment {
+            Arc::new(Environment {
                 parent: None,
                 data: HashMap::from([
                     ("print" .into(), Function(TFunction(Arc::new(chronos_inner_print)))),
                     ("+"     .into(), Function(TFunction(Arc::new(chronos_inner_add)))),
                     ("lambda".into(), Macro(   TMacro   (Arc::new(chronos_inner_lambda)))),
                 ])
-            }
+            })
         )
     }
 
-    pub fn from_parent_and_data(parent: &'static Environment, data: HashMap<std::string::String, TData>) -> Environment {
+    pub fn from_parent_and_data(parent: Arc<Environment>, data: HashMap<std::string::String, TData>) -> Environment {
         Environment {
             parent: Some(parent),
             data
@@ -78,14 +82,14 @@ impl Environment {
     fn resolve(&self, name: &str) -> Option<TData> {
         if let Some(data) = self.data.get(name) {
             Some(data.clone())
-        } else if let Some(parent) = self.parent {
-            parent.resolve(name)
+        } else if let Some(ref parent) = self.parent {
+            parent.clone().resolve(name)
         } else {
             None
         }
     }
 
-    pub fn eval(&'static self, ast: AST) -> TData {
+    pub fn eval(self: &Arc<Self>, ast: AST) -> TData {
         match ast {
             Abstract(Application {box f, box arg }) => {
                 let func = self.eval(f);
@@ -93,7 +97,7 @@ impl Environment {
                     let arg = self.eval(arg);
                     (*f.0)(arg)
                 } else if let Macro(f) = func {
-                    let result = (*f.0)(self, arg);
+                    let result = (*f.0)(self.clone(), arg);
                     self.eval(result)
                 } else {
                     unimplemented!() // TODO better errors
